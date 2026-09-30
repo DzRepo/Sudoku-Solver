@@ -322,6 +322,7 @@ def _result(solved: bool, original: List[int], log: Log) -> Dict:
         "initial_grid": list(original),
         "steps": [s.to_dict() for s in log.steps],
         "boards": log.boards,
+        "cands": log.cands,
     }
 
 
