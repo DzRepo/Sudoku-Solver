@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Large local puzzle dataset (~1.4 GB) for the Random puzzle button
+sudoku.csv

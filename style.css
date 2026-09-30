@@ -126,6 +126,13 @@ select {
 .cell.hidden-single { color: var(--hidden); font-weight: 700; }
 .cell.guess { color: var(--guess); font-weight: 700; }
 
+/* Unit (row / column / box) highlight: light fill on peers of the selected cell */
+.cell.unit-row { background: #eef2ff; }
+.cell.unit-col { background: #eef2ff; }
+.cell.unit-box { background: #e0e7ff; }
+/* intersection of two units gets a slightly stronger tint */
+.cell.unit-row.unit-col, .cell.unit-row.unit-box, .cell.unit-col.unit-box { background: #d9e0fd; }
+
 .cell.selected { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
 .cell.current {
   background: #eef2ff;
@@ -133,10 +140,45 @@ select {
   outline-offset: -3px;
   z-index: 1;
 }
+
+/* Solved board: all numbers turn green */
+.board.solved .cell.given,
+.board.solved .cell.naked,
+.board.solved .cell.hidden-single,
+.board.solved .cell.guess { color: var(--done); }
+.board.solved .cell { animation: solved-pop 0.5s ease-out; }
+@keyframes solved-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
 .cell.flash { animation: flash 0.6s ease-out; }
 @keyframes flash {
   0% { background: #c7d2fe; }
   100% { background: inherit; }
+}
+
+/* Log-entry highlighting: strong ring on the step's cell, lighter ring on
+   cells whose candidate was eliminated. */
+.cell.hl {
+  background: #eef2ff;
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+  z-index: 2;
+}
+.cell.hl-elim {
+  background: #f1f5f9;
+  outline: 2px solid #94a3b8;
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.log li { cursor: pointer; }
+.log li:hover { background: #eef1fb; }
+.log li.active {
+  background: #e0e7ff;
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent) inset;
 }
 
 /* ---------- pencil marks (candidate grid) ---------- */
@@ -183,6 +225,23 @@ select {
 .status { min-height: 1.4em; margin: 12px 0 0; font-size: 0.9rem; color: var(--muted); text-align: center; }
 .status.ok { color: var(--done); font-weight: 600; }
 .status.err { color: var(--backtrack); font-weight: 600; }
+
+/* Difficulty badge shown when a random puzzle loads */
+.difficulty-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.difficulty-badge.easy { background: #d1fae5; color: #065f46; }
+.difficulty-badge.medium { background: #dbeafe; color: #1e40af; }
+.difficulty-badge.hard { background: #fef3c7; color: #92400e; }
+.difficulty-badge.expert { background: #fee2e2; color: #991b1b; }
 
 /* ---------- log ---------- */
 .log-panel { display: flex; flex-direction: column; max-height: 78vh; }

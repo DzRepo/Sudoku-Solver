@@ -41,13 +41,20 @@ front-end and two JSON endpoints:
 |---|---|---|
 | `/api/solve` | `POST` | Body `{"grid": [81 ints, 0 = empty]}` → full solve result with step log |
 | `/api/examples` | `GET` | The bundled example puzzles |
+| `/api/random` | `GET` | A random puzzle from `sudoku.csv` (O(1) seek-based read) |
 | `/api/health` | `GET` | Liveness check |
 
 ### Using the UI
 
-- **Load an example** from the dropdown (Easy / Medium / Hard / Diabolical), or
-  click cells and type `1`–`9` (Backspace / `0` clears a cell). A number pad
+- **Load an example** from the dropdown (Easy / Medium / Hard / Diabolical),
+  or click **Random puzzle** to load one from `sudoku.csv` (~9 million
+  puzzles). The status bar shows the clue count and a color-coded difficulty
+  badge: **Easy** (≥36 clues), **Medium** (28–35), **Hard** (22–27),
+  **Expert** (<22).
+- Click cells and type `1`–`9` (Backspace / `0` clears a cell). A number pad
   appears under the board for click/keyboard-free entry.
+- **Selecting a cell** highlights its row, column, and 3×3 box with a light
+  fill so you can see the units it constrains at a glance.
 - **Solve** starts the animated replay; **Stop** cancels it.
 - **Step** solves the puzzle first, then advances one move at a time: each
   click applies the next step to the board and appends its explanation to the
@@ -55,8 +62,12 @@ front-end and two JSON endpoints:
 - **Pencil marks** toggles candidate display: every empty cell shows the digits
   it could still take. While replaying (Solve or Step), pencil marks track the
   solver's candidate eliminations step by step.
+- When the puzzle **completes correctly**, the board celebrates: all numbers
+  turn green with a brief pop animation.
 - The **Speed** selector controls replay speed (Slow → Instant).
 - The right-hand **Step-by-step log** lists every move with its explanation.
+  Clicking a log entry highlights the cell it touched (strong ring) and every
+  cell whose candidate it eliminated (lighter ring).
 
 ## Using the solver from the command line
 
@@ -125,9 +136,10 @@ carries a "why this method" explanation.
 | `techniques_pairs.py` | Pair-based patterns: XY-Wing (and a W-Wing stub) |
 | `techniques_chains.py` | Chain-based patterns: AIC (alternating inference chain) |
 | `solver.py` | The two-phase solver (logical → search), the "why this method" reasoning, examples, benchmarks, and the CLI |
-| `server.py` | Standard-library web server (static files + `/api/solve`, `/api/examples`) |
-| `index.html` / `app.js` / `style.css` | The web front-end: board editing, number pad, pencil marks, animated replay, single-step mode, step log |
+| `server.py` | Standard-library web server (static files + `/api/solve`, `/api/examples`, `/api/random`) |
+| `index.html` / `app.js` / `style.css` | The web front-end: board editing, number pad, pencil marks, unit highlighting, animated replay, single-step mode, solved-board celebration, step log |
 | `test_sudoku.py` | Test suite |
+| `sudoku.csv` | ~9 million puzzle/solution pairs (81 digits, comma, 81 digits per row) backing the **Random puzzle** button — not committed; download it separately |
 | `sudoku_solver.py` | The original single-file engine (kept for reference; the app now uses `solver.py`) |
 
 ## Techniques used
@@ -176,6 +188,11 @@ If no technique can make progress, the solver moves to the search phase
 
 ## Notes & known limitations
 
+- **`sudoku.csv`** (not committed — ~1.4 GB) is required for the **Random
+  puzzle** button. Each row is `puzzle,solution` (81 digits each). The server
+  reads it with a direct byte seek, so loading a random puzzle is O(1) no
+  matter how large the file is. Without the file the button reports an error
+  but everything else works.
 - The bundled **Diabolical (28-clue)** benchmark solves with **zero guesses** —
   pure logic, including XY-Wing and AIC.
 - A couple of the harder benchmarks (2.6, 7.2) can hit a dead end in the logical

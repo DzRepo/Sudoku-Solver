@@ -10,13 +10,40 @@ Endpoints:
 
 import json
 import mimetypes
+import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from random import randrange
 
 import solver
 
 ROOT = Path(__file__).parent
+CSV_PATH = ROOT / "sudoku.csv"
+HEADER_LEN = 16  # len(b"puzzle,solution\n")
+ROW_LEN = 164    # 81 digits + comma + 81 digits + newline
+
+
+def read_random_puzzle():
+    """Return a uniformly random puzzle (81-char string) from sudoku.csv.
+
+    Every data row is exactly 164 bytes (81 + comma + 81 + newline), so a
+    random row index maps to an exact byte offset — an O(1) read instead of
+    scanning the whole ~1.4 GB file.
+    """
+    size = os.path.getsize(CSV_PATH)
+    nrows = (size - HEADER_LEN) // ROW_LEN
+    if nrows <= 0:
+        raise ValueError("no puzzles in sudoku.csv")
+    with CSV_PATH.open("rb") as f:
+        for _ in range(8):  # bounded retries in case the file layout differs
+            off = HEADER_LEN + randrange(nrows) * ROW_LEN
+            f.seek(off)
+            line = f.readline()
+            puzzle = line.split(b",")[0].strip()
+            if len(line) == ROW_LEN and len(puzzle) == 81 and puzzle.isdigit():
+                return puzzle.decode("ascii")
+    raise ValueError("no valid puzzle found in sudoku.csv")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -32,6 +59,9 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/api/examples":
             self._send(200, solver.EXAMPLES)
+            return
+        if path == "/api/random":
+            self._random_puzzle()
             return
         if path == "/api/health":
             self._send(200, {"status": "ok"})
@@ -74,6 +104,26 @@ class Handler(BaseHTTPRequestHandler):
 
         result = solver.solve(grid)
         self._send(200, result)
+
+    def _random_puzzle(self):
+        """Return a uniformly random puzzle from sudoku.csv.
+
+        The file is ~9 million fixed-width rows (~1.4 GB), so instead of
+        scanning it we seek to a random byte offset and read the row that
+        contains it — an O(1) read.
+        """
+        if not CSV_PATH.is_file():
+            self._send(404, {"error": "sudoku.csv not found"})
+            return
+        try:
+            puzzle = read_random_puzzle()
+        except ValueError:
+            self._send(404, {"error": "no puzzles in sudoku.csv"})
+            return
+        except Exception:
+            self._send(500, {"error": "failed to read sudoku.csv"})
+            return
+        self._send(200, {"grid": [int(ch) for ch in puzzle]})
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[sudoku] " + (fmt % args) + "\n")
