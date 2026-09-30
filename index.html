@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sudoku Solver — step by step</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Sudoku Solver</h1>
+    <p class="tagline">Enter a puzzle, hit Solve — every move is logged and explained.</p>
+  </header>
+
+  <main>
+    <!-- ============ Puzzle panel ============ -->
+    <section class="panel puzzle-panel">
+      <div class="toolbar">
+        <label>Example:
+          <select id="example-select"><option value="">— choose —</option></select>
+        </label>
+        <button id="load-example" class="btn ghost">Load</button>
+        <span class="spacer"></span>
+        <label class="speed">Speed
+          <select id="speed-select">
+            <option value="250">Slow</option>
+            <option value="120" selected>Normal</option>
+            <option value="40">Fast</option>
+            <option value="0">Instant</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="board" class="board" aria-label="Sudoku board"></div>
+
+      <div class="toolbar actions">
+        <button id="solve-btn" class="btn primary">Solve</button>
+        <button id="stop-btn" class="btn ghost hidden">Stop</button>
+        <button id="clear-btn" class="btn ghost">Clear board</button>
+      </div>
+
+      <p id="status" class="status"></p>
+    </section>
+
+    <!-- ============ Step log panel ============ -->
+    <section class="panel log-panel">
+      <div class="log-header">
+        <h2>Step-by-step log</h2>
+        <span id="step-counter" class="counter"></span>
+      </div>
+      <ol id="log" class="log"></ol>
+    </section>
+  </main>
+
+  <footer>
+    Techniques used: <b>naked single</b>, <b>hidden single</b>, and reasoned
+    <b>guessing with backtracking</b> when logic alone isn't enough.
+  </footer>
+
+  <script src="app.js?v=20260809b"></script>
+</body>
+</html>
