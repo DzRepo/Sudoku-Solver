@@ -46,8 +46,15 @@ front-end and two JSON endpoints:
 ### Using the UI
 
 - **Load an example** from the dropdown (Easy / Medium / Hard / Diabolical), or
-  click cells and type `1`–`9` (Backspace / `0` clears a cell).
+  click cells and type `1`–`9` (Backspace / `0` clears a cell). A number pad
+  appears under the board for click/keyboard-free entry.
 - **Solve** starts the animated replay; **Stop** cancels it.
+- **Step** solves the puzzle first, then advances one move at a time: each
+  click applies the next step to the board and appends its explanation to the
+  log. **Stop** exits step mode.
+- **Pencil marks** toggles candidate display: every empty cell shows the digits
+  it could still take. While replaying (Solve or Step), pencil marks track the
+  solver's candidate eliminations step by step.
 - The **Speed** selector controls replay speed (Slow → Instant).
 - The right-hand **Step-by-step log** lists every move with its explanation.
 
@@ -76,6 +83,7 @@ result = solver.solve(grid)   # grid: list of 81 ints, 0 = empty
 #   "initial_grid": [81 ints],  # the puzzle as given
 #   "steps": [ ... ],           # one dict per move
 #   "boards": [ ... ],          # board snapshot before each step
+#   "cands": [ ... ],           # candidate-set snapshot before each step
 # }
 ```
 
@@ -91,6 +99,9 @@ Each step dict has:
 
 The `boards` list holds a full 81-int snapshot before every step, so a client
 can single-step forward and backward: render `boards[n]` and apply `steps[n]`.
+`cands` holds a matching candidate-set snapshot per step (each entry is a list
+of 81 cells; empty cells list the digits still possible), which the UI uses to
+animate pencil marks as eliminations happen.
 
 ## Running the tests
 
@@ -115,7 +126,7 @@ carries a "why this method" explanation.
 | `techniques_chains.py` | Chain-based patterns: AIC (alternating inference chain) |
 | `solver.py` | The two-phase solver (logical → search), the "why this method" reasoning, examples, benchmarks, and the CLI |
 | `server.py` | Standard-library web server (static files + `/api/solve`, `/api/examples`) |
-| `index.html` / `app.js` / `style.css` | The web front-end: board editing, animated replay, step log |
+| `index.html` / `app.js` / `style.css` | The web front-end: board editing, number pad, pencil marks, animated replay, single-step mode, step log |
 | `test_sudoku.py` | Test suite |
 | `sudoku_solver.py` | The original single-file engine (kept for reference; the app now uses `solver.py`) |
 
