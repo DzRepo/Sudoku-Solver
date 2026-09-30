@@ -57,15 +57,19 @@ class Log:
     def __init__(self):
         self.steps: List[Step] = []
         self.boards: List[List[int]] = []  # board snapshot before each step
+        self.cands: List[List[List[int]]] = []  # candidate snapshot before each step
         self._pending: Optional[List[int]] = None  # pre-step snapshot
+        self._pending_cands: Optional[List[List[int]]] = None  # pre-step candidates
 
     def begin_step(self, grid: "Grid") -> None:
-        """Snapshot the board *before* the next step's mutation is applied."""
+        """Snapshot the board *and* candidates *before* the next step's mutation."""
         self._pending = list(grid.values)
+        self._pending_cands = [sorted(grid.cands[i]) for i in range(81)]
 
     def discard_step(self) -> None:
         """Drop a pending pre-step snapshot (the step turned out to be a no-op)."""
         self._pending = None
+        self._pending_cands = None
 
     def record(self, grid: "Grid", technique: str, row: Optional[int],
                col: Optional[int], value: Optional[int],
@@ -73,17 +77,21 @@ class Log:
                detail: str = "") -> Step:
         if self._pending is not None:
             self.boards.append(self._pending)
+            self.cands.append(self._pending_cands)
             self._pending = None
+            self._pending_cands = None
         else:
             # No begin_step() call: fall back to the grid as passed in.
             self.boards.append(list(grid.values))
+            self.cands.append([sorted(grid.cands[i]) for i in range(81)])
         step = Step(technique, row, col, value, eliminated, reason, detail)
         self.steps.append(step)
         return step
 
     def finalize(self, grid: "Grid") -> None:
-        """Append the final board snapshot (state after the last step)."""
+        """Append the final board + candidate snapshot (state after the last step)."""
         self.boards.append(list(grid.values))
+        self.cands.append([sorted(grid.cands[i]) for i in range(81)])
 
 
 # ---------------------------------------------------------------------------

@@ -2,12 +2,17 @@
 
 const state = {
   grid: new Array(81).fill(0),   // current board values (0 = empty)
+  cands: new Array(81).fill(null), // candidate sets per cell (null = unknown)
   tech: new Array(81).fill(null), // technique class per cell (naked/hidden-single/guess)
   givens: new Set(),             // indices the user typed in (shown bold blue)
   selected: null,                // currently clicked cell index
   animToken: 0,                  // bump to cancel a running animation
   boards: [],                    // authoritative board snapshot before each step
+  cursnap: [],                   // authoritative candidate snapshot before each step
   cursor: -1,                    // current step index during replay
+  steps: [],                     // full step list from the server
+  givensSet: new Set(),          // givens at solve time (for replay rendering)
+  stepMode: false,               // true while in single-step mode
 };
 
 const boardEl = document.getElementById("board");
@@ -16,6 +21,8 @@ const statusEl = document.getElementById("status");
 const counterEl = document.getElementById("step-counter");
 const solveBtn = document.getElementById("solve-btn");
 const stopBtn = document.getElementById("stop-btn");
+const stepBtn = document.getElementById("step-btn");
+const pencilBtn = document.getElementById("pencil-btn");
 
 /* ---------------- board rendering ---------------- */
 
@@ -32,6 +39,21 @@ function buildBoard() {
 
 function cellEl(i) { return boardEl.children[i]; }
 
+function renderPencil(i, el) {
+  const old = el.querySelector(".pencil");
+  if (old) old.remove();
+  const cands = state.cands[i];
+  if (!cands) return;
+  const p = document.createElement("div");
+  p.className = "pencil";
+  for (let d = 1; d <= 9; d++) {
+    const s = document.createElement("span");
+    if (cands.includes(d)) s.textContent = d;
+    p.appendChild(s);
+  }
+  el.appendChild(p);
+}
+
 function renderCell(i, flash = false) {
   const el = cellEl(i);
   const v = state.grid[i];
@@ -41,6 +63,7 @@ function renderCell(i, flash = false) {
     const cls = state.givens.has(i) ? "given" : state.tech[i];
     if (cls) el.classList.add(cls);
   }
+  if (!v) renderPencil(i, el);
   if (flash) {
     el.classList.remove("flash");
     void el.offsetWidth; // restart animation
@@ -113,9 +136,14 @@ document.getElementById("load-example").addEventListener("click", () => {
   if (!sel.value) return;
   stopAnimation();
   state.grid = JSON.parse(sel.value);
+  state.cands.fill(null);
   state.tech.fill(null);
   state.givens = new Set(state.grid.map((v, i) => (v ? i : -1)).filter(i => i >= 0));
+  state.givensSet.clear();
+  state.steps = [];
+  state.cursor = -1;
   state.selected = null;
+  pencilBtn.classList.remove("active");
   clearLog();
   setStatus("");
   renderAll();
@@ -168,6 +196,13 @@ function setStatus(msg, cls = "") {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function solve() {
+  if (state.stepMode) {
+    // Exit step mode without the stop-animation side effects.
+    state.stepMode = false;
+    state.animToken++;
+    state.steps = [];
+    state.cursor = -1;
+  }
   const payload = state.grid.slice();
   if (payload.every((v) => v === 0)) { setStatus("Enter at least one clue first.", "err"); return; }
 
@@ -203,15 +238,19 @@ async function solve() {
   const boards = result.boards && result.boards.length
     ? result.boards
     : buildBoards(result); // fallback if a server omits snapshots
+  const cands = result.cands && result.cands.length
+    ? result.cands
+    : buildCands(result, boards); // fallback if a server omits candidates
   const givens = new Set(payload.map((v, i) => (v ? i : -1)).filter((i) => i >= 0));
   state.boards = boards;
+  state.cursnap = cands;
   state.givens = givens;
 
   for (let n = 0; n < steps.length; n++) {
     if (token !== state.animToken) return; // user pressed Stop
     const step = steps[n];
     state.cursor = n;
-    renderStep(n, boards, step, givens);
+    renderStep(n, boards, cands, step, givens);
     addLogEntry(step, n + 1);
 
     if (step.type === "done") setStatus("Solved! See the log for how.", "ok");
@@ -240,9 +279,13 @@ async function solve() {
    cell (or cells) that step n touches. boards[n] is the pre-step snapshot,
    so rendering boards[n+1] shows the step's effect (placement or
    elimination) immediately — the highlighted cell is already filled. */
-function renderStep(n, boards, step, givens) {
+function renderStep(n, boards, cands, step, givens) {
   const board = boards[n + 1] || boards[boards.length - 1] || state.grid;
-  for (let i = 0; i < 81; i++) state.grid[i] = board[i];
+  const candSnap = cands[n + 1] || cands[cands.length - 1] || null;
+  for (let i = 0; i < 81; i++) {
+    state.grid[i] = board[i];
+    state.cands[i] = candSnap ? candSnap[i] : null;
+  }
 
   // Technique colour for the cell this step placed (if any).
   state.tech.fill(null);
@@ -265,6 +308,8 @@ function renderStep(n, boards, step, givens) {
     if (v) {
       const cls = givens.has(i) ? "given" : state.tech[i];
       if (cls) el.classList.add(cls);
+    } else {
+      renderPencil(i, el);
     }
     if (i === hi) el.classList.add("current");
     if (i === hi && step.value) {
@@ -293,23 +338,171 @@ function buildBoards(result) {
   return boards;
 }
 
+/* Derive candidate snapshots from board snapshots (fallback when the server
+   doesn't send `cands`).  Candidates = digits 1-9 minus those already placed
+   in the same row, column, or box. */
+function buildCands(result, boards) {
+  const cands = boards.map((board) => {
+    const out = [];
+    for (let i = 0; i < 81; i++) {
+      if (board[i] !== 0) { out.push([]); continue; }
+      const r = Math.floor(i / 9), c = i % 9;
+      const br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+      const used = new Set();
+      for (let k = 0; k < 9; k++) {
+        used.add(board[r * 9 + k]);
+        used.add(board[k * 9 + c]);
+        used.add(board[(br + Math.floor(k / 3)) * 9 + bc + (k % 3)]);
+      }
+      used.delete(0);
+      const s = [];
+      for (let d = 1; d <= 9; d++) if (!used.has(d)) s.push(d);
+      out.push(s);
+    }
+    return out;
+  });
+  return cands;
+}
+
+/* Compute candidates for a single board (used by the pencil-mark toggle). */
+function computeCands(board) {
+  const out = [];
+  for (let i = 0; i < 81; i++) {
+    if (board[i] !== 0) { out.push([]); continue; }
+    const r = Math.floor(i / 9), c = i % 9;
+    const br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+    const used = new Set();
+    for (let k = 0; k < 9; k++) {
+      used.add(board[r * 9 + k]);
+      used.add(board[k * 9 + c]);
+      used.add(board[(br + Math.floor(k / 3)) * 9 + bc + (k % 3)]);
+    }
+    used.delete(0);
+    const s = [];
+    for (let d = 1; d <= 9; d++) if (!used.has(d)) s.push(d);
+    out.push(s);
+  }
+  return out;
+}
+
+/* ---------------- pencil-mark toggle ---------------- */
+
+function togglePencil() {
+  if (state.animating) return;
+  if (state.cands.some((c) => c !== null)) {
+    // Turn off: clear all candidate data.
+    state.cands.fill(null);
+    pencilBtn.classList.remove("active");
+  } else {
+    // Turn on: compute candidates from the current board.
+    const c = computeCands(state.grid);
+    for (let i = 0; i < 81; i++) state.cands[i] = c[i];
+    pencilBtn.classList.add("active");
+  }
+  renderAll();
+}
+
 function stopAnimation() { state.animToken++; finishAnimation(); }
 
 function finishAnimation() {
   state.animating = false;
+  state.stepMode = false;
   solveBtn.classList.remove("hidden");
   stopBtn.classList.add("hidden");
 }
 
+/* ---------------- single-step mode ---------------- */
+
+async function startStepMode() {
+  const payload = state.grid.slice();
+  if (payload.every((v) => v === 0)) { setStatus("Enter at least one clue first.", "err"); return; }
+
+  state.animating = true;
+  state.stepMode = true;
+  solveBtn.classList.add("hidden");
+  stopBtn.classList.remove("hidden");
+  setStatus("Fetching solution…");
+
+  let result;
+  try {
+    const res = await fetch("/api/solve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ grid: payload }),
+    });
+    result = await res.json();
+  } catch {
+    setStatus("Could not reach the solver server.", "err");
+    return finishAnimation();
+  }
+
+  const steps = result.steps;
+  const boards = result.boards && result.boards.length
+    ? result.boards
+    : buildBoards(result);
+  const cands = result.cands && result.cands.length
+    ? result.cands
+    : buildCands(result, boards);
+  const givens = new Set(payload.map((v, i) => (v ? i : -1)).filter((i) => i >= 0));
+
+  state.steps = steps;
+  state.boards = boards;
+  state.cursnap = cands;
+  state.givens = givens;
+  state.givensSet = givens;
+  state.cursor = -1;
+
+  // Render the initial board (before any step) so the user sees the starting state.
+  for (let i = 0; i < 81; i++) {
+    state.grid[i] = boards[0][i];
+    state.cands[i] = cands[0] ? cands[0][i] : null;
+  }
+  state.tech.fill(null);
+  renderAll();
+  setStatus(`Ready. ${steps.length} step(s) to go. Click Step to advance.`);
+}
+
+function doStep() {
+  if (state.animating && state.stepMode) {
+    // Already in step mode: advance one step.
+    if (state.cursor + 1 >= state.steps.length) return;
+    const n = state.cursor + 1;
+    state.cursor = n;
+    const step = state.steps[n];
+    renderStep(n, state.boards, state.cursnap, step, state.givensSet);
+    addLogEntry(step, n + 1);
+
+    if (step.type === "done") {
+      setStatus("Solved! See the log for how.", "ok");
+      finishAnimation();
+    } else if (step.type === "error") {
+      setStatus("This puzzle has no solution.", "err");
+      finishAnimation();
+    } else {
+      setStatus(`Step ${n + 1} of ${state.steps.length}. Click Step to continue.`);
+    }
+  } else {
+    // Not in step mode yet: start it.
+    startStepMode();
+  }
+}
+
 solveBtn.addEventListener("click", solve);
 stopBtn.addEventListener("click", stopAnimation);
+stepBtn.addEventListener("click", doStep);
+pencilBtn.addEventListener("click", togglePencil);
 
 document.getElementById("clear-btn").addEventListener("click", () => {
   stopAnimation();
   state.grid.fill(0);
+  state.cands.fill(null);
   state.tech.fill(null);
   state.givens.clear();
+  state.givensSet.clear();
+  state.steps = [];
+  state.cursor = -1;
   state.selected = null;
+  pencilBtn.classList.remove("active");
   clearLog();
   setStatus("");
   renderAll();

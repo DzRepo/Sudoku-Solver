@@ -84,6 +84,7 @@ select {
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .btn.primary:hover { background: #4338ca; }
 .btn.ghost { background: transparent; }
+.btn.ghost.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .hidden { display: none !important; }
 
 /* ---------- board ---------- */
@@ -136,6 +137,28 @@ select {
 @keyframes flash {
   0% { background: #c7d2fe; }
   100% { background: inherit; }
+}
+
+/* ---------- pencil marks (candidate grid) ---------- */
+.cell .pencil {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 34%;
+  height: 34%;
+  font-size: clamp(4px, 0.7vw, 6.5px);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted);
+  pointer-events: none;
+}
+.cell .pencil span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ---------- number pad ---------- */
